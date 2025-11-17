@@ -32,6 +32,8 @@ func Init() error {
 		return errors.New("API_URL and API_TOKEN must be set")
 	}
 
+	ApiUrl = sanitizeBaseURL(ApiUrl)
+
 	cacheTTL := 30 * time.Second
 	if ttl := os.Getenv("CACHE_TTL_SECONDS"); ttl != "" {
 		if sec, err := strconv.Atoi(ttl); err == nil && sec > 0 {
@@ -96,4 +98,22 @@ func resolveAPIVersion(version string) string {
 
 func LogChat() int64 {
 	return logChatID
+}
+
+func sanitizeBaseURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimSuffix(raw, "/")
+
+	// If user passed a full API URL (e.g. .../api/v4) strip "/api/..."
+	apiIndex := strings.Index(strings.ToLower(raw), "/api/")
+	if apiIndex != -1 {
+		raw = raw[:apiIndex]
+	}
+
+	// If user ended with "/api", strip it
+	if strings.HasSuffix(strings.ToLower(raw), "/api") {
+		raw = raw[:len(raw)-len("/api")]
+	}
+
+	return strings.TrimSuffix(raw, "/")
 }
