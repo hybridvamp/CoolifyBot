@@ -18,6 +18,14 @@ const (
 	defaultCacheTTL   = 30 * time.Second
 )
 
+type notFoundError struct {
+	message string
+}
+
+func (e notFoundError) Error() string {
+	return e.message
+}
+
 type Client struct {
 	BaseURL    string
 	Token      string
@@ -28,6 +36,8 @@ type Client struct {
 
 	cache    *MemoryCache
 	cacheTTL time.Duration
+
+	fallbackVersions []string
 }
 
 type ClientOption func(*Client)
@@ -40,6 +50,7 @@ func NewClient(baseURL, token string, opts ...ClientOption) *Client {
 		Client:     &http.Client{Timeout: 15 * time.Second},
 		cache:      NewMemoryCache(),
 		cacheTTL:   defaultCacheTTL,
+		fallbackVersions: []string{"v4", "v3", "v2", "v1"},
 	}
 
 	for _, opt := range opts {
@@ -106,6 +117,18 @@ func (c *Client) apiURL(path string, query url.Values) string {
 	return full
 }
 
+func (c *Client) apiURLWithVersion(version, path string, query url.Values) string {
+	base := strings.TrimSuffix(c.BaseURL, "/")
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	full := fmt.Sprintf("%s/api/%s%s", base, version, path)
+	if len(query) > 0 {
+		full = full + "?" + query.Encode()
+	}
+	return full
+}
+
 func (c *Client) authorize(req *http.Request) {
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 }
@@ -133,7 +156,7 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 	}
 	if resp.StatusCode == http.StatusNotFound {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("resource not found (404): %s", strings.TrimSpace(string(body)))
+		return nil, notFoundError{message: fmt.Sprintf("resource not found (404): %s", strings.TrimSpace(string(body)))}
 	}
 	if resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
@@ -148,6 +171,62 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 		log.Printf("[coolify] %s %s -> %s", req.Method, req.URL.String(), resp.Status)
 	}
 	return body, err
+}
+
+func (c *Client) versionsToTry() []string {
+	seen := make(map[string]struct{})
+	var list []string
+
+	primary := c.APIVersion
+	if primary == "" {
+		primary = defaultAPIVersion
+	}
+	for _, v := range append([]string{primary}, c.fallbackVersions...) {
+		if v == "" {
+			continue
+		}
+		if !strings.HasPrefix(v, "v") {
+			v = "v" + v
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		list = append(list, v)
+	}
+	return list
+}
+
+func (c *Client) doWithFallback(method, path string, query url.Values, body io.Reader) ([]byte, error) {
+	versions := c.versionsToTry()
+	var lastErr error
+
+	for idx, version := range versions {
+		url := c.apiURLWithVersion(version, path, query)
+		req, err := http.NewRequest(method, url, body)
+		if err != nil {
+			return nil, err
+		}
+
+		respBody, err := c.do(req)
+		if err == nil {
+			// Cache the working version to avoid future fallbacks.
+			c.APIVersion = version
+			return respBody, nil
+		}
+
+		lastErr = err
+		_, isNotFound := err.(notFoundError)
+		if !isNotFound || idx == len(versions)-1 {
+			return err
+		}
+
+		if c.Debug {
+			log.Printf("[coolify] received 404 with version %s, trying next version", version)
+		}
+	}
+
+	return nil, lastErr
 }
 
 func decodePage[T any](body []byte) (*Page[T], error) {
@@ -198,13 +277,7 @@ func listPage[T any](client *Client, path string, query url.Values, cacheKey str
 		}
 	}
 
-	url := client.apiURL(path, query)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	body, err := client.do(req)
+	body, err := client.doWithFallback(http.MethodGet, path, query, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -246,13 +319,7 @@ func (c *Client) GetApplicationByUUID(uuid string) (*ApplicationDetail, error) {
 		}
 	}
 
-	url := c.apiURL("/applications/"+uuid, nil)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	body, err := c.do(req)
+	body, err := c.doWithFallback(http.MethodGet, "/applications/"+uuid, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -267,13 +334,7 @@ func (c *Client) GetApplicationByUUID(uuid string) (*ApplicationDetail, error) {
 }
 
 func (c *Client) DeleteApplicationByUUID(uuid string) error {
-	url := c.apiURL("/applications/"+uuid, nil)
-	req, err := http.NewRequest("DELETE", url, nil)
-	if err != nil {
-		return err
-	}
-
-	if _, err := c.do(req); err != nil {
+	if _, err := c.doWithFallback(http.MethodDelete, "/applications/"+uuid, nil, nil); err != nil {
 		return err
 	}
 
@@ -282,13 +343,7 @@ func (c *Client) DeleteApplicationByUUID(uuid string) error {
 }
 
 func (c *Client) GetApplicationLogsByUUID(uuid string) (string, error) {
-	url := c.apiURL("/applications/"+uuid+"/logs", url.Values{"lines": []string{"-1"}})
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return "", err
-	}
-
-	body, err := c.do(req)
+	body, err := c.doWithFallback(http.MethodGet, "/applications/"+uuid+"/logs", url.Values{"lines": []string{"-1"}}, nil)
 	if err != nil {
 		return "", err
 	}
@@ -302,13 +357,7 @@ func (c *Client) GetApplicationLogsByUUID(uuid string) (string, error) {
 }
 
 func (c *Client) GetApplicationEnvsByUUID(uuid string) ([]EnvironmentVariable, error) {
-	url := c.apiURL("/applications/"+uuid+"/envs", nil)
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	body, err := c.do(req)
+	body, err := c.doWithFallback(http.MethodGet, "/applications/"+uuid+"/envs", nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -329,14 +378,8 @@ func (c *Client) StartApplicationDeployment(uuid string, force, instantDeploy bo
 	if instantDeploy {
 		query.Set("instant_deploy", "true")
 	}
-	url := c.apiURL("/applications/"+uuid+"/start", query)
 
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	body, err := c.do(req)
+	body, err := c.doWithFallback(http.MethodGet, "/applications/"+uuid+"/start", query, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -352,14 +395,7 @@ func (c *Client) StartApplicationDeployment(uuid string, force, instantDeploy bo
 }
 
 func (c *Client) StopApplicationByUUID(uuid string) (*StopApplicationResponse, error) {
-	url := c.apiURL("/applications/"+uuid+"/stop", nil)
-
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	body, err := c.do(req)
+	body, err := c.doWithFallback(http.MethodGet, "/applications/"+uuid+"/stop", nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -374,14 +410,7 @@ func (c *Client) StopApplicationByUUID(uuid string) (*StopApplicationResponse, e
 }
 
 func (c *Client) RestartApplicationByUUID(uuid string) (*StartDeploymentResponse, error) {
-	url := c.apiURL("/applications/"+uuid+"/restart", nil)
-
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	body, err := c.do(req)
+	body, err := c.doWithFallback(http.MethodGet, "/applications/"+uuid+"/restart", nil, nil)
 	if err != nil {
 		return nil, err
 	}

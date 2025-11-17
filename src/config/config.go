@@ -26,6 +26,7 @@ var (
 	devList    = os.Getenv("DEV_IDS") // comma-separated
 	devIDs     []int64                // parsed slice
 	logChatID  int64
+	apiVersion string
 )
 
 func Init() error {
@@ -34,6 +35,7 @@ func Init() error {
 	}
 
 	ApiUrl = sanitizeBaseURL(ApiUrl)
+	apiVersion = resolveAPIVersion(ApiVersion)
 
 	cacheTTL := 30 * time.Second
 	if ttl := os.Getenv("CACHE_TTL_SECONDS"); ttl != "" {
@@ -45,7 +47,7 @@ func Init() error {
 	Coolify = coolify.NewClient(
 		ApiUrl,
 		ApiToken,
-		coolify.WithAPIVersion(resolveAPIVersion(ApiVersion)),
+		coolify.WithAPIVersion(apiVersion),
 		coolify.WithCacheTTL(cacheTTL),
 		coolify.WithHTTPClient(&http.Client{Timeout: 10 * time.Second}),
 		coolify.WithDebug(DebugAPI == "1" || strings.ToLower(DebugAPI) == "true"),
