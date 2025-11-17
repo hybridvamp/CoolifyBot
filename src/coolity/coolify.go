@@ -130,7 +130,7 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-func (c *Client) decodePage[T any](body []byte) (*Page[T], error) {
+func decodePage[T any](body []byte) (*Page[T], error) {
 	var page Page[T]
 	if err := json.Unmarshal(body, &page); err == nil {
 		if len(page.Results()) > 0 || page.PageInfo() != (Pagination{}) {
@@ -171,25 +171,25 @@ func (c *Client) invalidateApplications(uuid string) {
 	}
 }
 
-func (c *Client) listPage[T any](path string, query url.Values, cacheKey string) (*Page[T], error) {
-	if v, ok := c.getCached(cacheKey); ok {
+func listPage[T any](client *Client, path string, query url.Values, cacheKey string) (*Page[T], error) {
+	if v, ok := client.getCached(cacheKey); ok {
 		if res, ok := v.(*Page[T]); ok {
 			return res, nil
 		}
 	}
 
-	url := c.apiURL(path, query)
+	url := client.apiURL(path, query)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	body, err := c.do(req)
+	body, err := client.do(req)
 	if err != nil {
 		return nil, err
 	}
 
-	page, err := c.decodePage[T](body)
+	page, err := decodePage[T](body)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +202,7 @@ func (c *Client) listPage[T any](path string, query url.Values, cacheKey string)
 		}
 	}
 
-	c.cacheResult(cacheKey, page)
+	client.cacheResult(cacheKey, page)
 	return page, nil
 }
 
@@ -215,7 +215,7 @@ func (c *Client) ListApplications(page, perPage int) (*Page[Application], error)
 		query.Set("per_page", strconv.Itoa(perPage))
 	}
 	cacheKey := fmt.Sprintf("apps:list:%d:%d", page, perPage)
-	return c.listPage[Application]("/applications", query, cacheKey)
+	return listPage[Application](c, "/applications", query, cacheKey)
 }
 
 func (c *Client) GetApplicationByUUID(uuid string) (*ApplicationDetail, error) {
@@ -384,7 +384,7 @@ func (c *Client) ListDeployments(page, perPage int) (*Page[Deployment], error) {
 		query.Set("per_page", strconv.Itoa(perPage))
 	}
 	cacheKey := fmt.Sprintf("deployments:list:%d:%d", page, perPage)
-	return c.listPage[Deployment]("/deployments", query, cacheKey)
+	return listPage[Deployment](c, "/deployments", query, cacheKey)
 }
 
 func (c *Client) ListDeploymentsByApplication(uuid string, page, perPage int) (*Page[Deployment], error) {
@@ -396,7 +396,7 @@ func (c *Client) ListDeploymentsByApplication(uuid string, page, perPage int) (*
 		query.Set("per_page", strconv.Itoa(perPage))
 	}
 	cacheKey := fmt.Sprintf("deployments:app:%s:%d:%d", uuid, page, perPage)
-	return c.listPage[Deployment]("/applications/"+uuid+"/deployments", query, cacheKey)
+	return listPage[Deployment](c, "/applications/"+uuid+"/deployments", query, cacheKey)
 }
 
 func (c *Client) ListEnvironments(page, perPage int) (*Page[Environment], error) {
@@ -408,7 +408,7 @@ func (c *Client) ListEnvironments(page, perPage int) (*Page[Environment], error)
 		query.Set("per_page", strconv.Itoa(perPage))
 	}
 	cacheKey := fmt.Sprintf("environments:list:%d:%d", page, perPage)
-	return c.listPage[Environment]("/environments", query, cacheKey)
+	return listPage[Environment](c, "/environments", query, cacheKey)
 }
 
 func (c *Client) ListDatabases(page, perPage int) (*Page[Database], error) {
@@ -420,5 +420,5 @@ func (c *Client) ListDatabases(page, perPage int) (*Page[Database], error) {
 		query.Set("per_page", strconv.Itoa(perPage))
 	}
 	cacheKey := fmt.Sprintf("databases:list:%d:%d", page, perPage)
-	return c.listPage[Database]("/databases", query, cacheKey)
+	return listPage[Database](c, "/databases", query, cacheKey)
 }
