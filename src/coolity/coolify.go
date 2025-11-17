@@ -217,9 +217,9 @@ func (c *Client) doWithFallback(method, path string, query url.Values, body io.R
 
 		lastErr = err
 		_, isNotFound := err.(notFoundError)
-		if !isNotFound || idx == len(versions)-1 {
-			return err
-		}
+			if !isNotFound || idx == len(versions)-1 {
+				return nil, err
+			}
 
 		if c.Debug {
 			log.Printf("[coolify] received 404 with version %s, trying next version", version)
