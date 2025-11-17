@@ -18,13 +18,14 @@ var (
 	ApiUrl     = os.Getenv("API_URL")
 	ApiToken   = os.Getenv("API_TOKEN")
 	ApiVersion = os.Getenv("API_VERSION")
-		Token      = os.Getenv("TOKEN")
-		Port       = os.Getenv("PORT")
-		WebhookUrl = os.Getenv("WEBHOOK_URL")
-		LogID      = os.Getenv("LOG_ID")
-		devList    = os.Getenv("DEV_IDS") // comma-separated
-		devIDs     []int64                // parsed slice
-		logChatID  int64
+	Token      = os.Getenv("TOKEN")
+	Port       = os.Getenv("PORT")
+	WebhookUrl = os.Getenv("WEBHOOK_URL")
+	LogID      = os.Getenv("LOG_ID")
+	DebugAPI   = os.Getenv("DEBUG_COOLIFY")
+	devList    = os.Getenv("DEV_IDS") // comma-separated
+	devIDs     []int64                // parsed slice
+	logChatID  int64
 )
 
 func Init() error {
@@ -47,6 +48,7 @@ func Init() error {
 		coolify.WithAPIVersion(resolveAPIVersion(ApiVersion)),
 		coolify.WithCacheTTL(cacheTTL),
 		coolify.WithHTTPClient(&http.Client{Timeout: 10 * time.Second}),
+		coolify.WithDebug(DebugAPI == "1" || strings.ToLower(DebugAPI) == "true"),
 	)
 
 	// Parse DEV_IDS

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -22,6 +23,8 @@ type Client struct {
 	Token      string
 	APIVersion string
 	Client     *http.Client
+
+	Debug bool
 
 	cache    *MemoryCache
 	cacheTTL time.Duration
@@ -84,6 +87,12 @@ func WithCache(cache *MemoryCache) ClientOption {
 	}
 }
 
+func WithDebug(enabled bool) ClientOption {
+	return func(c *Client) {
+		c.Debug = enabled
+	}
+}
+
 func (c *Client) apiURL(path string, query url.Values) string {
 	base := strings.TrimSuffix(c.BaseURL, "/")
 	if !strings.HasPrefix(path, "/") {
@@ -107,6 +116,9 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 	}
 
 	c.authorize(req)
+	if c.Debug {
+		log.Printf("[coolify] %s %s", req.Method, req.URL.String())
+	}
 	resp, err := c.Client.Do(req)
 	if err != nil {
 		return nil, err
@@ -120,14 +132,22 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 		return nil, errors.New("invalid token (400)")
 	}
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, errors.New("resource not found")
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("resource not found (404): %s", strings.TrimSpace(string(body)))
 	}
 	if resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
+		if c.Debug {
+			log.Printf("[coolify] %s %s -> %s\n%s", req.Method, req.URL.String(), resp.Status, strings.TrimSpace(string(body)))
+		}
 		return nil, fmt.Errorf("unexpected response: %s (%s)", resp.Status, strings.TrimSpace(string(body)))
 	}
 
-	return io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err == nil && c.Debug {
+		log.Printf("[coolify] %s %s -> %s", req.Method, req.URL.String(), resp.Status)
+	}
+	return body, err
 }
 
 func decodePage[T any](body []byte) (*Page[T], error) {
