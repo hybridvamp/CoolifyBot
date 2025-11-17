@@ -46,7 +46,12 @@ func newDispatcher() *ext.Dispatcher {
 	dispatcher.AddHandler(handlers.NewCommand("ping", pingCommandHandler))
 
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("list_projects"), listProjectsHandler))
+	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("list_deployments"), listDeploymentsHandler))
+	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("list_environments"), listEnvironmentsHandler))
+	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("list_databases"), listDatabasesHandler))
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("project_menu:"), projectMenuHandler))
+	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("app_deployments:"), projectDeploymentsHandler))
+	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("app_envs:"), appEnvsHandler))
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("restart:"), restartHandler))
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("deploy:"), deployHandler))
 	dispatcher.AddHandler(handlers.NewCallback(callbackquery.Prefix("logs:"), logsHandler))

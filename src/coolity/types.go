@@ -22,7 +22,8 @@ type ApplicationDetail struct {
 	BuildPack               string `json:"build_pack"`
 	CreatedAt               string `json:"created_at"`
 	UpdatedAt               string `json:"updated_at"`
-	// TODO: Add more fields as needed...
+	// Additional resource associations
+	Environment string `json:"environment"`
 }
 
 type ApplicationLogs struct {
@@ -55,4 +56,78 @@ type StartDeploymentResponse struct {
 
 type StopApplicationResponse struct {
 	Message string `json:"message"`
+}
+
+type Deployment struct {
+	UUID          string `json:"uuid"`
+	Status        string `json:"status"`
+	Commit        string `json:"commit"`
+	Branch        string `json:"branch"`
+	CommitMessage string `json:"commit_message"`
+	Type          string `json:"type"`
+	CreatedAt     string `json:"created_at"`
+	UpdatedAt     string `json:"updated_at"`
+	ApplicationID int64  `json:"application_id"`
+	Application   string `json:"application"`
+}
+
+type Environment struct {
+	ID          int64  `json:"id"`
+	UUID        string `json:"uuid"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	ProjectID   int64  `json:"project_id"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+type Database struct {
+	ID        int64  `json:"id"`
+	UUID      string `json:"uuid"`
+	Name      string `json:"name"`
+	Status    string `json:"status"`
+	Type      string `json:"type"`
+	Host      string `json:"host"`
+	Port      string `json:"port"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+type Pagination struct {
+	CurrentPage int `json:"current_page"`
+	LastPage    int `json:"last_page"`
+	PerPage     int `json:"per_page"`
+	Total       int `json:"total"`
+}
+
+type Meta struct {
+	Pagination Pagination `json:"pagination"`
+}
+
+type Page[T any] struct {
+	Data         []T        `json:"data"`
+	Items        []T        `json:"items"`
+	Applications []T        `json:"applications"` // compatibility with older Coolify responses
+	Pagination   Pagination `json:"pagination"`
+	Meta         Meta       `json:"meta"`
+}
+
+func (p Page[T]) Results() []T {
+	switch {
+	case len(p.Data) > 0:
+		return p.Data
+	case len(p.Items) > 0:
+		return p.Items
+	case len(p.Applications) > 0:
+		return p.Applications
+	default:
+		return nil
+	}
+}
+
+func (p Page[T]) PageInfo() Pagination {
+	if p.Meta.Pagination != (Pagination{}) {
+		return p.Meta.Pagination
+	}
+	return p.Pagination
 }

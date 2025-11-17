@@ -23,7 +23,14 @@ Use the menu below to get started.`,
 	startMarkup := gotgbot.InlineKeyboardMarkup{
 		InlineKeyboard: [][]gotgbot.InlineKeyboardButton{
 			{
-				{Text: "📋 List Projects", CallbackData: "list_projects"},
+				{Text: "📋 List Projects", CallbackData: "list_projects:1"},
+			},
+			{
+				{Text: "🚚 Deployments", CallbackData: "list_deployments:1"},
+				{Text: "🌍 Environments", CallbackData: "list_environments:1"},
+			},
+			{
+				{Text: "🗄 Databases", CallbackData: "list_databases:1"},
 			},
 			{
 				{Text: "🆘 Support Chat", Url: "https://t.me/GuardxSupport"},

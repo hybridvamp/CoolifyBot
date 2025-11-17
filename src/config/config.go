@@ -17,6 +17,7 @@ var (
 	Coolify    *coolify.Client
 	ApiUrl     = os.Getenv("API_URL")
 	ApiToken   = os.Getenv("API_TOKEN")
+	ApiVersion = os.Getenv("API_VERSION")
 	Token      = os.Getenv("TOKEN")
 	Port       = os.Getenv("PORT")
 	WebhookUrl = os.Getenv("WEBHOOK_URL")
@@ -29,13 +30,20 @@ func Init() error {
 		return errors.New("API_URL and API_TOKEN must be set")
 	}
 
-	Coolify = &coolify.Client{
-		BaseURL: ApiUrl,
-		Token:   ApiToken,
-		Client: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+	cacheTTL := 30 * time.Second
+	if ttl := os.Getenv("CACHE_TTL_SECONDS"); ttl != "" {
+		if sec, err := strconv.Atoi(ttl); err == nil && sec > 0 {
+			cacheTTL = time.Duration(sec) * time.Second
+		}
 	}
+
+	Coolify = coolify.NewClient(
+		ApiUrl,
+		ApiToken,
+		coolify.WithAPIVersion(resolveAPIVersion(ApiVersion)),
+		coolify.WithCacheTTL(cacheTTL),
+		coolify.WithHTTPClient(&http.Client{Timeout: 10 * time.Second}),
+	)
 
 	// Parse DEV_IDS
 	for _, idStr := range strings.Split(devList, ",") {
@@ -62,4 +70,15 @@ func IsDev(userID int64) bool {
 		}
 	}
 	return false
+}
+
+func resolveAPIVersion(version string) string {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return ""
+	}
+	if !strings.HasPrefix(version, "v") {
+		version = "v" + version
+	}
+	return version
 }
