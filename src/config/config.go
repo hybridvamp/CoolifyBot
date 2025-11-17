@@ -18,11 +18,13 @@ var (
 	ApiUrl     = os.Getenv("API_URL")
 	ApiToken   = os.Getenv("API_TOKEN")
 	ApiVersion = os.Getenv("API_VERSION")
-	Token      = os.Getenv("TOKEN")
-	Port       = os.Getenv("PORT")
-	WebhookUrl = os.Getenv("WEBHOOK_URL")
-	devList    = os.Getenv("DEV_IDS") // comma-separated
-	devIDs     []int64                // parsed slice
+		Token      = os.Getenv("TOKEN")
+		Port       = os.Getenv("PORT")
+		WebhookUrl = os.Getenv("WEBHOOK_URL")
+		LogID      = os.Getenv("LOG_ID")
+		devList    = os.Getenv("DEV_IDS") // comma-separated
+		devIDs     []int64                // parsed slice
+		logChatID  int64
 )
 
 func Init() error {
@@ -59,6 +61,15 @@ func Init() error {
 		}
 	}
 
+	// Parse LOG_ID
+	if LogID != "" {
+		if id, err := strconv.ParseInt(LogID, 10, 64); err == nil {
+			logChatID = id
+		} else {
+			log.Printf("LOG_ID is not an integer: %s", LogID)
+		}
+	}
+
 	return nil
 }
 
@@ -81,4 +92,8 @@ func resolveAPIVersion(version string) string {
 		version = "v" + version
 	}
 	return version
+}
+
+func LogChat() int64 {
+	return logChatID
 }

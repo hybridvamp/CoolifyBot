@@ -14,22 +14,35 @@ import (
 )
 
 func errorHandler(bot *gotgbot.Bot, ctx *ext.Context, err error) ext.DispatcherAction {
-	var msg string
-	if ctx.Update != nil {
-		if updateBytes, err := json.MarshalIndent(ctx.Update, "", "  "); err == nil {
-			msg = html.EscapeString(string(updateBytes))
-		} else {
-			msg = "failed to marshal update"
-		}
-	} else {
-
-		msg = "no update"
+	logID := config.LogChat()
+	if logID == 0 {
+		log.Printf("logger chat id not configured (LOG_ID missing); error: %v", err)
+		return ext.DispatcherActionNoop
 	}
 
-	message := fmt.Sprintf("<blockquote expandable>New Error:\n%s\n\n%s</blockquote>", err.Error(), msg)
-	if _, err = bot.SendMessage(5938660179, message, &gotgbot.SendMessageOpts{ParseMode: "HTML", DisableNotification: true}); err != nil {
-		log.Printf("failed to send error message to logger: %s", err)
-		return ext.DispatcherActionNoop
+	var updatePayload string
+	if ctx.Update != nil {
+		if updateBytes, marshalErr := json.MarshalIndent(ctx.Update, "", "  "); marshalErr == nil {
+			updatePayload = html.EscapeString(string(updateBytes))
+		} else {
+			updatePayload = "failed to marshal update: " + marshalErr.Error()
+		}
+	} else {
+		updatePayload = "no update in context"
+	}
+
+	message := fmt.Sprintf(
+		"<b>🚨 Bot Error</b>\n<code>%s</code>\n\n<b>Update:</b>\n<blockquote expandable>%s</blockquote>\n<b>Time:</b> %s",
+		html.EscapeString(err.Error()),
+		updatePayload,
+		time.Now().Format(time.RFC3339),
+	)
+
+	if _, sendErr := bot.SendMessage(logID, message, &gotgbot.SendMessageOpts{
+		ParseMode:           "HTML",
+		DisableNotification: true,
+	}); sendErr != nil {
+		log.Printf("failed to send error message to logger (%d): %v", logID, sendErr)
 	}
 
 	return ext.DispatcherActionNoop
